@@ -8,3 +8,4 @@ output/
 uploads/
 
 package-lock.json
+.env
