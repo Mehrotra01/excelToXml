@@ -11,7 +11,6 @@ function sanitizeFileName(fileName: string): string {
 }
 
 export async function generateXMLFile(rows: InputRow[]) {
-  console.log("Started creating XML", rows);
 
   const outDir = './output';
   await fs.ensureDir(outDir);

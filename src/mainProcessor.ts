@@ -3,12 +3,10 @@ import { generateXMLFile } from "./generator/xmlGenerator";
 import { commitAndPushXML, createPullRequest } from "./git/gitAutomation";
 
 export async function processExcelFile(filePath: string): Promise<void> {
-  console.log(`processing: ${filePath}`);
 
   const rows = await parseExcel(filePath);
   await generateXMLFile(rows);
 
-  const xmlFilePath = "generated/form-changeSet.xml";
   const branchName = `auto/form-PR-From-Excel`;
   const commitMessage = "feat: add Liquibase XML from uploaded Excel";
   

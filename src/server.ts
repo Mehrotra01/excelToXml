@@ -27,7 +27,6 @@ const upload = multer({ storage });
 app.post("/upload", upload.single('excel'), async (req, res):Promise<any> => {
   const fileReq = req as MulterReqquest;
   try {
-    console.log("File recived")
     // const filePath = req.file?.path;
     if (!fileReq.file|| !fileReq.file.path) return res.status(400).json({ error: "No file uploaded" });
 
