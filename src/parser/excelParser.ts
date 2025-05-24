@@ -42,19 +42,19 @@ export async function parseExcel(filePath: string): Promise<InputRow[]> {
 
     try {
       const formattedRow = {
-        fileName: String(fileName),
-        changeSetId: String(changeSetId),
-        formNbr: String(formNbr),
-        formName: String(formName),
-        editionDt: String(editionDt),
-        lclPrtEle: lclPrtEle === "true",
-        optInd: optInd === "true",
-        msrInd: msrInd === "true",
-        mnlAmdInd: mnlAmdInd === "true",
-        pullLstInd: pullLstInd === "true",
+        fileName: fileName,
+        changeSetId: changeSetId,
+        formNbr: formNbr,
+        formName: formName,
+        editionDt: editionDt,
+        lclPrtEle: lclPrtEle === true,
+        optInd: optInd === true,
+        msrInd: msrInd === true,
+        mnlAmdInd: mnlAmdInd === true,
+        pullLstInd: pullLstInd === true,
         effectiveDate: formatDate(effectiveDate),
         expirationDate: formatDate(expirationDate),
-        lob: String(lob),
+        lob: lob,
         rcpType: String(rcpType || "")
           .split(",")
           .map((str) => str.trim())
