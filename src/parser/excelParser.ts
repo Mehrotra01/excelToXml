@@ -1,22 +1,6 @@
 import ExcelJS from "exceljs";
-
-export interface InputRow {
-  fileName: string;
-  changeSetId: string;
-  formNbr: string;
-  formName: string;
-  editionDt: string;
-  lclPrtEle: boolean;
-  optInd: boolean;
-  msrInd: boolean;
-  mnlAmdInd: boolean;
-  pullLstInd: boolean;
-  effectiveDate: string;
-  expirationDate: string;
-  lob: string;
-  rcpType: string[]; // JSON-parsed string
-  srtKey: Record<string, string>; // JSON-parsed string
-}
+import { inputRowSchema } from "../validation/schema";
+import {InputRow}  from "../types/inputRow";
 
 export async function parseExcel(filePath: string): Promise<InputRow[]> {
   const workbook = new ExcelJS.Workbook();
@@ -36,7 +20,7 @@ export async function parseExcel(filePath: string): Promise<InputRow[]> {
       return;
     }
 
-    const values = row.values.slice(1); // safely skip first empty index (Excel is 1-indexed)
+    const values = row.values.slice(1);
 
     const [
       fileName,
@@ -56,29 +40,47 @@ export async function parseExcel(filePath: string): Promise<InputRow[]> {
       srtKey,
     ] = values;
 
-    rows.push({
-      fileName: String(fileName),
-      changeSetId: String(changeSetId),
-      formNbr: String(formNbr),
-      formName: String(formName),
-      editionDt: String(editionDt),
-      lclPrtEle: lclPrtEle === "true",
-      optInd: optInd === "true",
-      msrInd: msrInd === "true",
-      mnlAmdInd: mnlAmdInd === "true",
-      pullLstInd: pullLstInd === "true",
-      effectiveDate: String(effectiveDate),
-      expirationDate: String(expirationDate),
-      lob: String(lob),
-      rcpType: String(rcpType || "")
-        .split(",")
-        .map((str) => str.trim())
-        .filter(Boolean),
-      srtKey: parseLooseJson(srtKey),
+    try {
+      const formattedRow = {
+        fileName: String(fileName),
+        changeSetId: String(changeSetId),
+        formNbr: String(formNbr),
+        formName: String(formName),
+        editionDt: String(editionDt),
+        lclPrtEle: lclPrtEle === "true",
+        optInd: optInd === "true",
+        msrInd: msrInd === "true",
+        mnlAmdInd: mnlAmdInd === "true",
+        pullLstInd: pullLstInd === "true",
+        effectiveDate: formatDate(effectiveDate),
+        expirationDate: formatDate(expirationDate),
+        lob: String(lob),
+        rcpType: String(rcpType || "")
+          .split(",")
+          .map((str) => str.trim())
+          .filter(Boolean),
+        srtKey: parseLooseJson(srtKey),
+      };
 
-    });
+      const validatedRow = inputRowSchema.parse(formattedRow);
+      rows.push(validatedRow);
+    } catch (err) {
+      throw new Error(`Row ${rowNumber} validation failed: ${(err as Error).message}`);
+    }
   });
+
   return rows;
+}
+
+function formatDate(excelDate: any): string {
+  if (!excelDate) return "";
+  const date = new Date(excelDate);
+  if (isNaN(date.getTime())) return String(excelDate); // fallback for non-date values
+  return (
+    (date.getMonth() + 1).toString().padStart(2, '0') + '/' +
+    date.getDate().toString().padStart(2, '0') + '/' +
+    date.getFullYear()
+  );
 }
 
 function parseLooseJson(input: any): Record<string, string> {
@@ -88,9 +90,9 @@ function parseLooseJson(input: any): Record<string, string> {
   const obj: Record<string, string> = {};
 
   str.split(',').forEach(pair => {
-    const [key, value] = pair.split(':').map(p => p.trim());
+    const [key, value] = pair.split(/[:;]/).map(p => p.trim());
     if (key && value) {
-      obj[key] = value;
+      obj[key.toLowerCase()] = String(value); // <-- ensure value is a string
     }
   });
 

@@ -1,6 +1,6 @@
 import { create } from 'xmlbuilder2';
 import fs from 'fs-extra';
-import { InputRow } from '../parser/excelParser';
+import { InputRow } from '../types/inputRow';
 import path from 'path';
 
 function sanitizeFileName(fileName: string): string {
@@ -17,7 +17,7 @@ export async function generateXMLFile(rows: InputRow[]) {
   await fs.ensureDir(outDir);
 
   for (const row of rows) {
-    const root = create({ version: '1.0' })
+    const root = create({ version: '1.0', encoding:"UTF-8" })
       .ele('databaseChangeLog', { xmlns: 'http://www.liquibase.org/xml/ns/dbchangelog' })
       .ele('changeSet', {
         id: row.changeSetId,
