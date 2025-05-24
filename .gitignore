@@ -1,0 +1,10 @@
+# Ignore node_modules
+node_modules/
+
+# Ignore output directory
+output/
+
+# Ignore input directory
+uploads/
+
+package-lock.json
