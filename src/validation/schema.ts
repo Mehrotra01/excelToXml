@@ -33,16 +33,3 @@ export const inputRowSchema = z.object({
     level3: z.string().min(3)
   }),
 });
-
-export function formatZodError(error: ZodError, rowIndex?: number) {
-  const messages = error.errors.map((err) => {
-    const path = err.path.join(".");
-    const expected =
-      err.code === "invalid_type"
-        ? `expected ${err.expected}, got ${err.received}`
-        : "";
-    return `${path} is ${err.message}${expected ? ` (${expected})` : ""}`;
-  });
-
-  return `Row ${rowIndex ?? "?"} validation failed: ${messages.join("; ")}`;
-}
