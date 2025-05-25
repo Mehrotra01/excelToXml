@@ -10,10 +10,11 @@ function sanitizeFileName(fileName: string): string {
     .replace(/[^a-zA-Z0-9_\-\.]/g, ''); // remove other unsafe characters
 }
 
-export async function generateXMLFile(rows: InputRow[]) {
+export async function generateXMLFile(rows: InputRow[]):Promise<string[]> {
 
   const outDir = './output';
   await fs.ensureDir(outDir);
+  const allFiles:string[]=[];
 
   for (const row of rows) {
     const root = create({ version: '1.0', encoding:"UTF-8" })
@@ -36,5 +37,7 @@ export async function generateXMLFile(rows: InputRow[]) {
     const filePath = path.join(outDir, `${sanitizedFileName}.xml`);
     await fs.writeFile(filePath, xml, 'utf-8');
     console.log(`✅ XML generated at: ${filePath}`);
+    allFiles.push(filePath);
   }
+  return allFiles;
 }

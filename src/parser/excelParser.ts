@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
-import { inputRowSchema } from "../validation/schema";
-import {InputRow}  from "../types/inputRow";
+import { formatZodError, inputRowSchema } from "../validation/schema";
+import { InputRow } from "../types/inputRow";
+import { ZodError } from "zod";
 
 export async function parseExcel(filePath: string): Promise<InputRow[]> {
   const workbook = new ExcelJS.Workbook();
@@ -21,7 +22,6 @@ export async function parseExcel(filePath: string): Promise<InputRow[]> {
     }
 
     const values = row.values.slice(1);
-
     const [
       fileName,
       changeSetId,
@@ -47,11 +47,11 @@ export async function parseExcel(filePath: string): Promise<InputRow[]> {
         formNbr: formNbr,
         formName: formName,
         editionDt: editionDt,
-        lclPrtEle: lclPrtEle === true,
-        optInd: optInd === true,
-        msrInd: msrInd === true,
-        mnlAmdInd: mnlAmdInd === true,
-        pullLstInd: pullLstInd === true,
+        lclPrtEle: lclPrtEle,
+        optInd: optInd,
+        msrInd: msrInd,
+        mnlAmdInd: mnlAmdInd,
+        pullLstInd: pullLstInd,
         effectiveDate: formatDate(effectiveDate),
         expirationDate: formatDate(expirationDate),
         lob: lob,
@@ -65,9 +65,18 @@ export async function parseExcel(filePath: string): Promise<InputRow[]> {
       const validatedRow = inputRowSchema.parse(formattedRow);
       rows.push(validatedRow);
     } catch (err) {
-      throw new Error(`Row ${rowNumber} validation failed: ${(err as Error).message}`);
+      if (err instanceof ZodError) {
+        throw new Error(formatZodError(err, rowNumber));
+      }
+      throw new Error(
+        `Row ${rowNumber} validation failed: ${(err as Error).message}`
+      );
     }
   });
+
+  if (rows.length === 0) {
+    throw new Error("Excel file has no valid rows to process.");
+  }
 
   return rows;
 }
@@ -77,8 +86,10 @@ function formatDate(excelDate: any): string {
   const date = new Date(excelDate);
   if (isNaN(date.getTime())) return String(excelDate); // fallback for non-date values
   return (
-    (date.getMonth() + 1).toString().padStart(2, '0') + '/' +
-    date.getDate().toString().padStart(2, '0') + '/' +
+    (date.getMonth() + 1).toString().padStart(2, "0") +
+    "/" +
+    date.getDate().toString().padStart(2, "0") +
+    "/" +
     date.getFullYear()
   );
 }
@@ -89,8 +100,8 @@ function parseLooseJson(input: any): Record<string, string> {
   const str = String(input).trim();
   const obj: Record<string, string> = {};
 
-  str.split(',').forEach(pair => {
-    const [key, value] = pair.split(/[:;]/).map(p => p.trim());
+  str.split(",").forEach((pair) => {
+    const [key, value] = pair.split(/[:;]/).map((p) => p.trim());
     if (key && value) {
       obj[key.toLowerCase()] = String(value); // <-- ensure value is a string
     }
