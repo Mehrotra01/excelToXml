@@ -1,18 +1,29 @@
 import { parseExcel } from "./parser/excelParser";
 import { generateXMLFile } from "./generator/xmlGenerator";
-import { commitAndPushXML, createPullRequest } from "./git/gitAutomation";
+import { GitHubPRCreator, PRConfig } from "./git/gitAutomation";
+import dotenv from "dotenv";
 
+dotenv.config();
 export async function processExcelFile(filePath: string): Promise<void> {
 
   const rows = await parseExcel(filePath);
-  await generateXMLFile(rows);
+  const outputPath = await generateXMLFile(rows);
 
-  const branchName = `auto/form-PR-From-Excel`;
-  const commitMessage = "feat: add Liquibase XML from uploaded Excel";
-  
-  await commitAndPushXML(branchName, commitMessage);
-  
-  const prTitle = "Auto PR: Liquibase change set XML";
-  const prUrl = await createPullRequest(branchName, prTitle);
-  console.log("✅ Pull request created:", prUrl);
+  // Usage
+const prConfig: PRConfig = {
+  owner: "Mehrotra01",
+  repo: "excelToXml",
+  baseBranch: "master",
+  newBranch: `auto/form-${new Date}`,
+  filePath: outputPath,
+  commitMessage: "feat: add Liquibase XML from uploaded Excel",
+  prTitle: "Auto PR: Liquibase change set XML",
+  prBody: "Please pull these awesome changes in!"
+};
+// console.log(process.env.GITHUB_TOKEN)
+
+// const prCreator = new GitHubPRCreator(process.env.GITHUB_TOKEN || "your-token");
+// prCreator.createAutomatedPR(prConfig)
+//   .then(prUrl => console.log(`PR Created: ${prUrl}`))
+//   .catch(error => console.error(error));
 }
