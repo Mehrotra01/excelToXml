@@ -1,24 +1,29 @@
-import ExcelJS from "exceljs";
-import { inputRowSchema } from "../validation/schema";
-import { InputRow } from "../types/inputRow";
-import { ZodError } from "zod";
+import { InputRow } from "inputRow";
 import { hasFileBeenProcessed } from "../logger/processedFileLogs";
-import { formatDate, formatZodError } from "../utils/formating";
 import { parseLooseJson } from "../utils/formating";
+import { formatDate } from "../utils/formating";
+import { formatZodError } from "../utils/formating";
+import { inputRowSchema } from "../validation/schema";
+import { ZodError } from "zod";
+import ExcelJS from "exceljs";
 
-export async function parseExcel(filePath: string): Promise<InputRow[]> {
+export async function parseExcel(filePath: string): Promise<{
+  data: InputRow[];
+  errors: { rowNumber: number; error: string }[];
+}> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(filePath);
   const worksheet = workbook.getWorksheet(1);
 
-  const rows: InputRow[] = [];
-  const failedRows: { rowNumber: number; error: string; values: any[] }[] = [];
+  const data: InputRow[] = [];
+  const errors: { rowNumber: number; error: string }[] = [];
 
   if (!worksheet) {
-    throw new Error("Worksheet 'Sheet1' not found in the Excel file.");
+    throw new Error("Worksheet not found.");
   }
 
-  // Use for...of to support async/await properly
+  let actualRowCount = 0;
+
   for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
     const row = worksheet.getRow(rowNumber);
 
@@ -26,8 +31,15 @@ export async function parseExcel(filePath: string): Promise<InputRow[]> {
       console.warn(`Row ${rowNumber} is not an array, skipping.`);
       continue;
     }
-
     const values = row.values.slice(1);
+
+    const isEmpty = values.every(
+      (val: any) => val === null || val === undefined || val === ""
+    );
+    if (isEmpty) continue;
+
+    actualRowCount++;
+
     const [
       fileName,
       changeSetId,
@@ -48,19 +60,19 @@ export async function parseExcel(filePath: string): Promise<InputRow[]> {
 
     try {
       const formattedRow = {
-        fileName: fileName,
-        changeSetId: changeSetId,
-        formNbr: formNbr,
-        formName: formName,
-        editionDt: editionDt,
-        lclPrtEle: lclPrtEle,
-        optInd: optInd,
-        msrInd: msrInd,
-        mnlAmdInd: mnlAmdInd,
-        pullLstInd: pullLstInd,
+        fileName,
+        changeSetId,
+        formNbr,
+        formName,
+        editionDt,
+        lclPrtEle,
+        optInd,
+        msrInd,
+        mnlAmdInd,
+        pullLstInd,
         effectiveDate: formatDate(effectiveDate),
         expirationDate: formatDate(expirationDate),
-        lob: lob,
+        lob,
         rcpType: String(rcpType || "")
           .split(",")
           .map((str) => str.trim())
@@ -70,35 +82,29 @@ export async function parseExcel(filePath: string): Promise<InputRow[]> {
 
       const validatedRow = inputRowSchema.parse(formattedRow);
 
-      const alreadyProcessed = await hasFileBeenProcessed(String(fileName+"-"+formNbr || ""));
+      const alreadyProcessed = await hasFileBeenProcessed(
+        String(fileName + "-" + formNbr || "")
+      );
       if (alreadyProcessed) {
-        throw new Error(`⚠️ File "${fileName+"-"+formNbr}" has already been processed.`);
+        throw new Error(
+          `⚠️ File "${fileName + "-" + formNbr}" has already been processed.`
+        );
       }
 
-      rows.push(validatedRow);
+      data.push(validatedRow);
     } catch (err) {
-      // if (err instanceof ZodError) {
-      //   throw new Error(formatZodError(err, rowNumber));
-      // }
-       failedRows.push({
+      errors.push({
         rowNumber,
-        error: err instanceof ZodError ? formatZodError(err, rowNumber) : (err as Error).message,
-        values,
+        error:
+          err instanceof ZodError
+            ? formatZodError(err, rowNumber)
+            : (err as Error).message,
       });
-      continue;
-      // throw new Error(
-      //   `Row ${rowNumber} validation failed: ${(err as Error).message}`
-      // );
     }
   }
 
-
-  console.log(`✅ Processed: ${rows.length} row(s)`);
-  console.log(`❌ Failed: ${failedRows.length} row(s)`);
-
-  if (rows.length === 0) {
-    throw new Error("Excel file has no valid rows to process. It contains no new or valid entries.");
-  }
-
-  return rows;
+  return {
+    data,
+    errors,
+  };
 }
