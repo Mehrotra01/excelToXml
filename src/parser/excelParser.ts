@@ -1,7 +1,10 @@
 import ExcelJS from "exceljs";
-import { formatZodError, inputRowSchema } from "../validation/schema";
+import { inputRowSchema } from "../validation/schema";
 import { InputRow } from "../types/inputRow";
 import { ZodError } from "zod";
+import { hasFileBeenProcessed } from "../logger/processedFileLogs";
+import { formatDate, formatZodError } from "../utils/formating";
+import { parseLooseJson } from "../utils/formating";
 
 export async function parseExcel(filePath: string): Promise<InputRow[]> {
   const workbook = new ExcelJS.Workbook();
@@ -9,16 +12,19 @@ export async function parseExcel(filePath: string): Promise<InputRow[]> {
   const worksheet = workbook.getWorksheet(1);
 
   const rows: InputRow[] = [];
+  const failedRows: { rowNumber: number; error: string; values: any[] }[] = [];
+
   if (!worksheet) {
     throw new Error("Worksheet 'Sheet1' not found in the Excel file.");
   }
 
-  worksheet.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return; // skip header
+  // Use for...of to support async/await properly
+  for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
+    const row = worksheet.getRow(rowNumber);
 
     if (!Array.isArray(row.values)) {
       console.warn(`Row ${rowNumber} is not an array, skipping.`);
-      return;
+      continue;
     }
 
     const values = row.values.slice(1);
@@ -63,49 +69,36 @@ export async function parseExcel(filePath: string): Promise<InputRow[]> {
       };
 
       const validatedRow = inputRowSchema.parse(formattedRow);
+
+      const alreadyProcessed = await hasFileBeenProcessed(String(fileName+"-"+formNbr || ""));
+      if (alreadyProcessed) {
+        throw new Error(`⚠️ File "${fileName+"-"+formNbr}" has already been processed.`);
+      }
+
       rows.push(validatedRow);
     } catch (err) {
-      if (err instanceof ZodError) {
-        throw new Error(formatZodError(err, rowNumber));
-      }
-      throw new Error(
-        `Row ${rowNumber} validation failed: ${(err as Error).message}`
-      );
+      // if (err instanceof ZodError) {
+      //   throw new Error(formatZodError(err, rowNumber));
+      // }
+       failedRows.push({
+        rowNumber,
+        error: err instanceof ZodError ? formatZodError(err, rowNumber) : (err as Error).message,
+        values,
+      });
+      continue;
+      // throw new Error(
+      //   `Row ${rowNumber} validation failed: ${(err as Error).message}`
+      // );
     }
-  });
+  }
+
+
+  console.log(`✅ Processed: ${rows.length} row(s)`);
+  console.log(`❌ Failed: ${failedRows.length} row(s)`);
 
   if (rows.length === 0) {
-    throw new Error("Excel file has no valid rows to process.");
+    throw new Error("Excel file has no valid rows to process. It contains no new or valid entries.");
   }
 
   return rows;
-}
-
-function formatDate(excelDate: any): string {
-  if (!excelDate) return "";
-  const date = new Date(excelDate);
-  if (isNaN(date.getTime())) return String(excelDate); // fallback for non-date values
-  return (
-    (date.getMonth() + 1).toString().padStart(2, "0") +
-    "/" +
-    date.getDate().toString().padStart(2, "0") +
-    "/" +
-    date.getFullYear()
-  );
-}
-
-function parseLooseJson(input: any): Record<string, string> {
-  if (!input) return {};
-
-  const str = String(input).trim();
-  const obj: Record<string, string> = {};
-
-  str.split(",").forEach((pair) => {
-    const [key, value] = pair.split(/[:;]/).map((p) => p.trim());
-    if (key && value) {
-      obj[key.toLowerCase()] = String(value); // <-- ensure value is a string
-    }
-  });
-
-  return obj;
 }
