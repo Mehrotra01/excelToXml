@@ -4,10 +4,10 @@ import { GitHubPRCreator, PRConfig } from "./git/gitAutomation";
 import dotenv from "dotenv";
 
 dotenv.config();
-export async function processExcelFile(filePath: string): Promise<void> {
+export async function processExcelFile(filePath: string): Promise<any> {
 
-  const rows = await parseExcel(filePath);
-  const outputPath = await generateXMLFile(rows);
+  const {data,errors} = await parseExcel(filePath);
+  const outputPath = await generateXMLFile(data);
 
   // Usage
 const prConfig: PRConfig = {
@@ -26,5 +26,5 @@ const prConfig: PRConfig = {
 // prCreator.createAutomatedPR(prConfig)
 //   .then(prUrl => console.log(`PR Created: ${prUrl}`))
 //   .catch(error => console.error(error));
-
+  return {data,errors};
 }
