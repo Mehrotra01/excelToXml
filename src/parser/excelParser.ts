@@ -3,7 +3,6 @@ import ExcelJS from "exceljs";
 import { ZodError, z } from "zod";
 import { hasFileBeenProcessed } from "../logger/processedFileLogs";
 import { formatDate, formatZodError } from "../utils/formating";
-import { InsertSchema, ParsedRow } from "../types/inputRow";
 
 const REQUIRED_FIELDS = [
   "formNbr",
@@ -15,6 +14,27 @@ const REQUIRED_FIELDS = [
 ];
 const OPTIONAL_FIELDS = ["editionDt", "lob"];
 
+export interface ParsedRow {
+  meta: {
+    operation: "insert" | "update";
+    fileName: string;
+    changeSetId: string;
+  };
+  formNbr: string;
+  attributeToUpdate?: Record<string, any>;
+  [key: string]: any;
+}
+
+const InsertSchema = z.object({
+  fileName: z.string().min(1, "Missing fileName"),
+  changeSetId: z.string().min(1, "Missing changeSetId"),
+  formNbr: z.string().min(1, "Missing formNbr"),
+  formName: z.string().min(1, "Missing formName"),
+  effectiveDate: z.string().min(1, "Missing effectiveDate"),
+  expirationDate: z.string().min(1, "Missing expirationDate"),
+  rcpType: z.array(z.string()).optional(),
+  srtKey: z.string().min(8).max(20),
+});
 
 export async function parseExcel(filePath: string): Promise<{
   data: ParsedRow[];
@@ -57,7 +77,7 @@ export async function parseExcel(filePath: string): Promise<{
       } else {
         data[header] =
           typeof cellValue === "boolean"
-            ? cellValue
+            ? String(cellValue)
             : String(cellValue || "").trim();
       }
     });
@@ -125,6 +145,49 @@ export async function parseExcel(filePath: string): Promise<{
           LEVEL2: digits.substring(2, 5),
           LEVEL3: digits.substring(5, 8),
         };
+
+        const emptyFields: string[] = [];
+        [...REQUIRED_FIELDS, ...OPTIONAL_FIELDS].forEach((key) => {
+          if (
+            key === "rcpType" &&
+            Array.isArray(data[key]) &&
+            data[key].length === 0
+          ) {
+            emptyFields.push(key);
+          } else if (
+            key === "srtKey" &&
+            (!data[key] || String(data[key]).trim() === "")
+          ) {
+            emptyFields.push(key);
+          } else if (data[key] === "") {
+            emptyFields.push(key);
+          }
+        });
+        Object.entries(data).forEach(([key, val]) => {
+          if (
+            ![
+              ...REQUIRED_FIELDS,
+              ...OPTIONAL_FIELDS,
+              "fileName",
+              "changeSetId",
+              "Operation",
+              "operation",
+            ].includes(key) &&
+            val === ""
+          ) {
+            emptyFields.push(key);
+          }
+        });
+
+        if (emptyFields.length > 0) {
+          failedRows.push({
+            rowNumber,
+            error: `Insert row contains empty values for: ${emptyFields.join(
+              ", "
+            )}`,
+          });
+          continue;
+        }
 
         const staticFields = {
           ...REQUIRED_FIELDS.reduce((acc, key) => {

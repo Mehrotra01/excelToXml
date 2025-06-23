@@ -1,14 +1,13 @@
 // src/generator/xmlGenerator.ts
 import { create } from "xmlbuilder2";
-import fs from "fs-extra";
-import path from "path";
+import * as fs from "fs-extra";
+import * as path from "path";
 import { markFileAsProcessed } from "../logger/processedFileLogs";
 
 function sanitizeFileName(fileName: string): string {
   return fileName
-    .replace(/[:\/\\?\*"<>|]/g, "")
-    .replace(/\s+/g, "_")
-    .replace(/[^a-zA-Z0-9_\-\.]/g, "");
+    .replace(/[\\/:*?"<>|\s]+/g, "_") // Remove unsafe characters
+    .replace(/[^a-zA-Z0-9_.-]/g, "");
 }
 
 export async function generateXMLFile(rows: any[]): Promise<string[]> {
@@ -17,65 +16,103 @@ export async function generateXMLFile(rows: any[]): Promise<string[]> {
   const allFiles: string[] = [];
 
   for (const row of rows) {
+    const metadata = row.meta;
+    const sanitizedFileName = sanitizeFileName(metadata.fileName);
+    const fileName = `${sanitizedFileName}-${row.formNbr || "unknown"}.xml`;
+    const filePath = path.join(outDir, fileName);
+
     const root = create({ version: "1.0", encoding: "UTF-8" })
       .ele("databaseChangeLog", {
         xmlns: "http://www.liquibase.org/xml/ns/dbchangelog",
         "xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+        "xmlns:ext": "http://www.liquibase.org/xml/ns/dbchangelog-ext",
+        "xmlns:mongodb": "http://www.liquibase.org/xml/ns/mongodb",
+        "xmlns:mongodb-pro": "http://www.liquibase.org/xml/ns/pro-mongodb",
         "xsi:schemaLocation":
-          "http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.4.xsd"
+          "http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd " +
+          "http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd " +
+          "http://www.liquibase.org/xml/ns/pro-mongodb http://www.liquibase.org/xml/ns/pro-mongodb/liquibase-pro-mongodb-latest.xsd " +
+          "http://www.liquibase.org/xml/ns/mongodb http://www.liquibase.org/xml/ns/mongodb/liquibase-mongodb-latest.xsd"
       });
 
     const changeSet = root.ele("changeSet", {
-      id: row.meta.changeSetId,
-      author: "system"
+      id: `${metadata.changeSetId}_${row.formNbr}`,
+      author: "$(collection.name)"
     });
 
-    if (row.meta.operation === "insert") {
-      const insert = changeSet.ele("insert", { tableName: "your_table_name" });
+    if (metadata.operation === "insert") {
+      const fullDocument = {
+        formName: row.formName,
+        formNbr: row.formNbr,
+        editionDt: row.editionDt,
+        localPrintEligibleInd: row.localPrintElidgble,
+        optionalInd: row.optionalInd,
+        manualAmendmentInd: row.manualAmendInd,
+        manuscriptInd: row.manuscriptInd,
+        pullListInd: row.pullListInd,
+        mailingAdderssInd: row.mailingAdderssInd,
+        xyzInd: row.xyzInd,
+        effectiveDate: row.effectiveDate,
+        expirationDate: row.expirationDate,
+        lob: row.lob,
+        recipientTypes: row.rcpType,
+        sortingKeys: row.srtKey,
+        ...Object.fromEntries(
+          Object.entries(row).filter(
+            ([key]) =>
+              ![
+                "meta",
+                "formName",
+                "formNbr",
+                "editionDt",
+                "localPrintElidgble",
+                "optionalInd",
+                "manualAmendInd",
+                "manuscriptInd",
+                "pullListInd",
+                "mailingAdderssInd",
+                "xyzInd",
+                "effectiveDate",
+                "expirationDate",
+                "lob",
+                "rcpType",
+                "srtKey"
+              ].includes(key)
+          )
+        )
+      };
 
-      insert.ele("column", { name: "formNbr", value: row.formNbr });
-      insert.ele("column", { name: "formName", value: row.formName });
-      insert.ele("column", { name: "lob", value: row.lob });
-
-      Object.entries(row).forEach(([key, value]) => {
-        if (!["meta", "formNbr", "formName", "lob"].includes(key)) {
-          insert.ele("column", {
-            name: key,
-            value: typeof value === "object" ? JSON.stringify(value) : String(value)
-          });
-        }
+      const insert = changeSet.ele("mongodb:insertOne", {
+        collectionName: "$(collection.name)"
       });
-    }
-
-    if (row.meta.operation === "update") {
-      const update = changeSet.ele("update", { tableName: "your_table_name" });
-
-      Object.entries(row.attributeToUpdate || {}).forEach(([key, value]) => {
-        update.ele("column", {
-          name: key,
-          value: typeof value === "object" ? JSON.stringify(value) : String(value)
-        });
+      insert.ele("mongodb:document").txt(JSON.stringify(fullDocument, null, 2));
+    } else if (metadata.operation === "update") {
+      const update = changeSet.ele("mongodb:updateOne", {
+        collectionName: "$(collection.name)"
       });
-
-      const formNbr = row.formNbr?.trim();
-      if (formNbr === "*" || !formNbr) {
-        update.ele("where").txt("1=1");
-      } else if (formNbr.includes(",")) {
-        const list = formNbr
-          .split(",")
-          .map((f: string) => `'${f.trim()}'`)
-          .join(", ");
-        update.ele("where").txt(`formNbr IN (${list})`);
-      } else {
-        update.ele("where").txt(`formNbr = '${formNbr}'`);
-      }
+      update.ele("mongodb:filter").txt(
+        JSON.stringify(
+          {
+            formnbr: row.formNbr
+          },
+          null,
+          2
+        )
+      );
+      update.ele("mongodb:update").txt(
+        JSON.stringify(
+          {
+            $set: row.attributeToUpdate
+          },
+          null,
+          2
+        )
+      );
     }
 
     const xml = root.end({ prettyPrint: true });
-    const filePath = path.join(outDir, `${sanitizeFileName(row.meta.fileName)}.xml`);
     await fs.writeFile(filePath, xml, "utf-8");
-    console.log(`✅ XML generated at: ${filePath}`);
-    await markFileAsProcessed(`${row.meta.fileName}-${row.formNbr}`);
+    await markFileAsProcessed(`${sanitizedFileName}-${row.formNbr || ""}`);
     allFiles.push(filePath);
   }
 
