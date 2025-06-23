@@ -1,3 +1,4 @@
+// src/server.ts or wherever your main entry is
 import express from "express";
 import multer from "multer";
 import path from "path";
@@ -26,16 +27,25 @@ const upload = multer({ storage });
 app.post("/upload", upload.single("excel"), async (req, res): Promise<any> => {
   const fileReq = req as MulterReqquest;
   try {
-    // const filePath = req.file?.path;
     if (!fileReq.file || !fileReq.file.path)
       return res.status(400).json({ error: "No file uploaded" });
 
-    const { data,errors } = await processExcelFile(fileReq.file.path);
-    return res.status(errors.length ? 207 : 200).json({
-      message: errors.length
-        ? `${data.length} row(s) passed, ${errors.length} failed.`
-        : "All rows processed successfully.",
+    const { data, errors, skipped } = await processExcelFile(fileReq.file.path);
+
+    const statusCode = errors.length || skipped.length ? 207 : 200;
+    const message =
+      statusCode === 207
+        ? `${data.length} row(s) passed, ${errors.length} failed, ${skipped.length} skipped.`
+        : "All rows processed successfully.";
+
+    return res.status(statusCode).json({
+      message,
+      passed: data.length,
+      failed: errors.length,
+      skipped: skipped.length,
       errors,
+      skippedRows: skipped,
+      data
     });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
@@ -43,5 +53,5 @@ app.post("/upload", upload.single("excel"), async (req, res): Promise<any> => {
 });
 
 app.listen(port, () => {
-  console.log(`server running on http://localhost:${port}`);
+  console.log(`🚀 Server running at http://localhost:${port}`);
 });
