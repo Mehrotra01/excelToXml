@@ -1,14 +1,14 @@
+// src/generator/xmlGenerator.ts
 import { create } from "xmlbuilder2";
 import fs from "fs-extra";
-import { InputRow } from "../types/inputRow";
 import path from "path";
 import { markFileAsProcessed } from "../logger/processedFileLogs";
 
 function sanitizeFileName(fileName: string): string {
   return fileName
-    .replace(/[:\/\\\?\*"<>\|]/g, "") // remove invalid characters
-    .replace(/\s+/g, "_") // replace spaces with underscores
-    .replace(/[^a-zA-Z0-9_\-\.]/g, ""); // remove other unsafe characters
+    .replace(/[:\/\\?\*"<>|]/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/[^a-zA-Z0-9_\-\.]/g, "");
 }
 
 export async function generateXMLFile(rows: any[]): Promise<string[]> {
@@ -17,37 +17,56 @@ export async function generateXMLFile(rows: any[]): Promise<string[]> {
   const allFiles: string[] = [];
 
   for (const row of rows) {
-    console.log(row)
     const root = create({ version: "1.0", encoding: "UTF-8" })
       .ele("databaseChangeLog", {
         xmlns: "http://www.liquibase.org/xml/ns/dbchangelog",
-      })
-      .ele("changeSet", {
-        id: row.meta.changeSetId,
-        author: "system",
-      })
-      .ele("insert", { tableName: "your_table_name" });
+        "xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+        "xsi:schemaLocation":
+          "http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.4.xsd"
+      });
 
-    root
-      .ele("column", { name: "formNbr", value: row.formNbr })
-      .up()
-      .ele("column", { name: "formName", value: row.formName })
-      .up()
-      .ele("column", { name: "lob", value: row.lob })
-      .up()
-      .txt(JSON.stringify(row))
+    const changeSet = root.ele("changeSet", {
+      id: row.meta.changeSetId,
+      author: "system"
+    });
 
+    if (row.meta.operation === "insert") {
+      const insert = changeSet.ele("insert", { tableName: "your_table_name" });
 
-    root.up().up().up();
+      insert.ele("column", { name: "formNbr", value: row.formNbr });
+      insert.ele("column", { name: "formName", value: row.formName });
+      insert.ele("column", { name: "lob", value: row.lob });
+
+      Object.entries(row).forEach(([key, value]) => {
+        if (!["meta", "formNbr", "formName", "lob"].includes(key)) {
+          insert.ele("column", {
+            name: key,
+            value: typeof value === "object" ? JSON.stringify(value) : String(value)
+          });
+        }
+      });
+    }
+
+    if (row.meta.operation === "update") {
+      const update = changeSet.ele("update", { tableName: "your_table_name" });
+
+      Object.entries(row.attributeToUpdate || {}).forEach(([key, value]) => {
+        update.ele("column", {
+          name: key,
+          value: typeof value === "object" ? JSON.stringify(value) : String(value)
+        });
+      });
+
+      update.ele("where").txt(`formNbr = '${row.formNbr}'`);
+    }
 
     const xml = root.end({ prettyPrint: true });
-
-    const sanitizedFileName = sanitizeFileName(row.meta.fileName);
-    const filePath = path.join(outDir, `${sanitizedFileName}.xml`);
+    const filePath = path.join(outDir, `${sanitizeFileName(row.meta.fileName)}.xml`);
     await fs.writeFile(filePath, xml, "utf-8");
     console.log(`✅ XML generated at: ${filePath}`);
-    await markFileAsProcessed(String(sanitizedFileName+"-"+row.formNbr || "")); // 👈 Log it after success
+    await markFileAsProcessed(`${row.meta.fileName}-${row.formNbr}`);
     allFiles.push(filePath);
   }
+
   return allFiles;
 }
