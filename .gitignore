@@ -5,7 +5,7 @@ node_modules/
 output
 
 # Ignore input directory
-uploads
+
 
 package-lock.json
 .env
