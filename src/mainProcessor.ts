@@ -6,7 +6,7 @@ import dotenv from "dotenv";
 dotenv.config();
 export async function processExcelFile(filePath: string): Promise<any> {
 
-  const {data,errors} = await parseExcel(filePath);
+  const {data,errors,skipped} = await parseExcel(filePath);
   const outputPath = await generateXMLFile(data);
 
   // Usage
@@ -26,5 +26,5 @@ const prConfig: PRConfig = {
 // prCreator.createAutomatedPR(prConfig)
 //   .then(prUrl => console.log(`PR Created: ${prUrl}`))
 //   .catch(error => console.error(error));
-  return {data,errors};
+  return {data,errors,skipped};
 }

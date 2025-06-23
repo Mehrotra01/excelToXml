@@ -11,18 +11,19 @@ function sanitizeFileName(fileName: string): string {
     .replace(/[^a-zA-Z0-9_\-\.]/g, ""); // remove other unsafe characters
 }
 
-export async function generateXMLFile(rows: InputRow[]): Promise<string[]> {
+export async function generateXMLFile(rows: any[]): Promise<string[]> {
   const outDir = "./output";
   await fs.ensureDir(outDir);
   const allFiles: string[] = [];
 
   for (const row of rows) {
+    console.log(row)
     const root = create({ version: "1.0", encoding: "UTF-8" })
       .ele("databaseChangeLog", {
         xmlns: "http://www.liquibase.org/xml/ns/dbchangelog",
       })
       .ele("changeSet", {
-        id: row.changeSetId,
+        id: row.meta.changeSetId,
         author: "system",
       })
       .ele("insert", { tableName: "your_table_name" });
@@ -32,13 +33,16 @@ export async function generateXMLFile(rows: InputRow[]): Promise<string[]> {
       .up()
       .ele("column", { name: "formName", value: row.formName })
       .up()
-      .ele("column", { name: "lob", value: row.lob });
+      .ele("column", { name: "lob", value: row.lob })
+      .up()
+      .txt(JSON.stringify(row))
+
 
     root.up().up().up();
 
     const xml = root.end({ prettyPrint: true });
 
-    const sanitizedFileName = sanitizeFileName(row.fileName);
+    const sanitizedFileName = sanitizeFileName(row.meta.fileName);
     const filePath = path.join(outDir, `${sanitizedFileName}.xml`);
     await fs.writeFile(filePath, xml, "utf-8");
     console.log(`✅ XML generated at: ${filePath}`);
