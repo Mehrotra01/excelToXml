@@ -14,13 +14,14 @@ export interface ParsedRow {
     changeSetId: string;
   };
   formNbr: string;
-  formName: string;
-  effectiveDate: string;
-  expirationDate: string;
-  rcpType: string[];
-  srtKey: Record<string, string>;
+  formName?: string;
+  effectiveDate?: string;
+  expirationDate?: string;
+  rcpType?: string[];
+  srtKey?: Record<string, string>;
   editionDt?: string;
   lob?: string;
+  attributeToUpdate?: Record<string, any>; // Only for update
   [key: string]: any;
 }
 
@@ -38,6 +39,9 @@ export async function parseExcel(filePath: string): Promise<{
   const headers: string[] = Array.isArray(headerRow.values)
     ? headerRow.values.slice(1).map((v) => v?.toString().trim() || "")
     : [];
+
+  const headersLowerMap: Record<string, string> = {};
+  headers.forEach(h => headersLowerMap[h.toLowerCase()] = h);
 
   const rows: ParsedRow[] = [];
   const failedRows: { rowNumber: number; error: string }[] = [];
@@ -61,31 +65,24 @@ export async function parseExcel(filePath: string): Promise<{
           .map((s) => s.trim())
           .filter(Boolean);
       } else if (header === "srtKey") {
-        const raw = String(cellValue || "").trim();
-        const digits = raw.replace(/\D/g, "");
-        if (digits.length !== 8) {
-          failedRows.push({ rowNumber, error: `Invalid srtKey format: must be exactly 8 digits (e.g., 20500200)` });
-          return;
-        }
-        const srtObj: Record<string, string> = {
-          LEVEL1: digits.substring(0, 2),
-          LEVEL2: digits.substring(2, 5),
-          LEVEL3: digits.substring(5, 8)
-        };
-        data[header] = srtObj;
+        data[header] = String(cellValue || "").trim(); // store raw for now
       } else {
         data[header] = typeof cellValue === "boolean" ? cellValue : String(cellValue || "").trim();
       }
     });
 
     try {
-      const missing = ["fileName", "changeSetId", ...REQUIRED_FIELDS].filter((key) => !(key in data) || data[key] === "" || data[key] === undefined || data[key] === null);
+      const requiredBase = ["fileName", "changeSetId", "formNbr"];
+      const missing = requiredBase.filter((key) => !(key in data) || data[key] === "" || data[key] === undefined);
       if (missing.length > 0) {
         failedRows.push({ rowNumber, error: `Missing required fields: ${missing.join(", ")}` });
         continue;
       }
 
+      const rawOperation = data[headersLowerMap["operation"]]?.toLowerCase();
+      const operation: "insert" | "update" = rawOperation === "update" ? "update" : "insert";
       const fileKey = `${data.fileName}-${data.formNbr}`;
+
       const alreadyProcessed = await hasFileBeenProcessed(fileKey);
       if (alreadyProcessed) {
         skippedRows.push({ rowNumber, reason: `File \"${fileKey}\" has already been processed.` });
@@ -94,7 +91,7 @@ export async function parseExcel(filePath: string): Promise<{
 
       const seenAttrs = new Set<string>();
       for (const key of headers) {
-        if (![...REQUIRED_FIELDS, "fileName", "changeSetId", ...OPTIONAL_FIELDS].includes(key)) {
+        if (![...REQUIRED_FIELDS, "fileName", "changeSetId", ...OPTIONAL_FIELDS, "Operation"].includes(key)) {
           if (seenAttrs.has(key)) {
             failedRows.push({ rowNumber, error: `❌ Duplicate attribute \"${key}\" in row` });
             continue;
@@ -108,34 +105,58 @@ export async function parseExcel(filePath: string): Promise<{
         }
       }
 
+      if (operation === "insert") {
+        const raw = String(data["srtKey"] || "").trim();
+        const digits = raw.replace(/\D/g, "");
+        if (digits.length !== 8) {
+          failedRows.push({ rowNumber, error: `Invalid srtKey format: must be exactly 8 digits (e.g., 20500200)` });
+          continue;
+        }
+        data["srtKey"] = {
+          LEVEL1: digits.substring(0, 2),
+          LEVEL2: digits.substring(2, 5),
+          LEVEL3: digits.substring(5, 8)
+        };
+      } else {
+        delete data["srtKey"]; // remove raw srtKey from update if present
+      }
+
       const meta = {
-        operation: "insert",
+        operation,
         fileName: data.fileName,
         changeSetId: data.changeSetId
       };
 
-      const staticFields = {
-        ...REQUIRED_FIELDS.reduce((acc, key) => {
-          acc[key] = data[key];
-          return acc;
-        }, {} as any),
-        ...OPTIONAL_FIELDS.reduce((acc, key) => {
-          if (data[key]) acc[key] = data[key];
-          return acc;
-        }, {} as any)
-      };
-
-      const dynamicFields = Object.fromEntries(
-        Object.entries(data).filter(
-          ([key]) => ![...REQUIRED_FIELDS, "fileName", "changeSetId", ...OPTIONAL_FIELDS, "operation"].includes(key)
-        )
-      );
-
-      const parsedRow: ParsedRow = {
-        meta,
-        ...staticFields,
-        ...dynamicFields
-      };
+      const parsedRow: ParsedRow =
+        operation === "insert"
+          ? {
+              meta,
+              ...REQUIRED_FIELDS.reduce((acc, key) => {
+                acc[key] = data[key];
+                return acc;
+              }, {} as any),
+              ...OPTIONAL_FIELDS.reduce((acc, key) => {
+                if (data[key]) acc[key] = data[key];
+                return acc;
+              }, {} as any),
+              ...Object.fromEntries(
+                Object.entries(data).filter(
+                  ([key]) => ![...REQUIRED_FIELDS, "fileName", "changeSetId", ...OPTIONAL_FIELDS, "Operation"].includes(key)
+                )
+              )
+            }
+          : {
+              meta,
+              formNbr: data.formNbr,
+              attributeToUpdate: Object.fromEntries(
+                Object.entries(data).filter(
+                  ([key, value]) =>
+                    !["fileName", "changeSetId", "formNbr", "Operation"].includes(key) &&
+                    value !== "" &&
+                    !(key === "rcpType" && Array.isArray(value) && value.length === 0)
+                )
+              )
+            };
 
       rows.push(parsedRow);
     } catch (err: any) {
@@ -145,7 +166,7 @@ export async function parseExcel(filePath: string): Promise<{
       });
     }
   }
-  console.log(headers)
+
   console.log(`✅ Processed: ${rows.length}`);
   console.log(`❌ Failed: ${failedRows.length}`);
   console.log(`⏭️ Skipped: ${skippedRows.length}`);

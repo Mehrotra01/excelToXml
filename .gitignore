@@ -2,10 +2,10 @@
 node_modules/
 
 # Ignore output directory
-output/
+output
 
 # Ignore input directory
-uploads/
+
 
 package-lock.json
 .env
