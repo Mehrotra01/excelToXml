@@ -57,7 +57,18 @@ export async function generateXMLFile(rows: any[]): Promise<string[]> {
         });
       });
 
-      update.ele("where").txt(`formNbr = '${row.formNbr}'`);
+      const formNbr = row.formNbr?.trim();
+      if (formNbr === "*" || !formNbr) {
+        update.ele("where").txt("1=1");
+      } else if (formNbr.includes(",")) {
+        const list = formNbr
+          .split(",")
+          .map((f: string) => `'${f.trim()}'`)
+          .join(", ");
+        update.ele("where").txt(`formNbr IN (${list})`);
+      } else {
+        update.ele("where").txt(`formNbr = '${formNbr}'`);
+      }
     }
 
     const xml = root.end({ prettyPrint: true });
