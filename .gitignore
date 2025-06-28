@@ -1,10 +1,5 @@
 # Ignore node_modules
 node_modules/
 
-# Ignore output directory
-
-# Ignore input directory
-
-
 package-lock.json
 .env

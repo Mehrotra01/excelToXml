@@ -1,30 +1,27 @@
+import * as fs from "fs-extra";
+import * as path from "path";
 import { parseExcel } from "./parser/excelParser";
 import { generateXMLFile } from "./generator/xmlGenerator";
-import { GitHubPRCreator, PRConfig } from "./git/gitAutomation";
-import dotenv from "dotenv";
+import { runGitAutomation } from "./git/gitAutomation";
 
-dotenv.config();
 export async function processExcelFile(filePath: string): Promise<any> {
+  const { data, errors, skipped } = await parseExcel(filePath);
 
-  const {data,errors,skipped} = await parseExcel(filePath);
-  const outputPath = await generateXMLFile(data);
+  const outputPaths = await generateXMLFile(data);
 
-  // Usage
-const prConfig: PRConfig = {
-  owner: "Mehrotra01",
-  repo: "excelToXml",
-  baseBranch: "master",
-  newBranch: `auto/form-${new Date}`,
-  filePath: outputPath,
-  commitMessage: "feat: add Liquibase XML from uploaded Excel",
-  prTitle: "Auto PR: Liquibase change set XML",
-  prBody: "Please pull these awesome changes in!"
-};
-// console.log(process.env.GITHUB_TOKEN)
+  if (outputPaths.length > 0) {
+    const outputDir = path.dirname(outputPaths[0]); // Get the folder of the first XML file
+    const filesInOutput = await fs.readdir(outputDir).catch(() => []);
+    console.log("Files in local output folder after XML generation:", filesInOutput);
 
-// const prCreator = new GitHubPRCreator(process.env.GITHUB_TOKEN || "your-token");
-// prCreator.createAutomatedPR(prConfig)
-//   .then(prUrl => console.log(`PR Created: ${prUrl}`))
-//   .catch(error => console.error(error));
-  return {data,errors,skipped};
+    if (filesInOutput.length > 0) {
+      await runGitAutomation(outputDir); // ✅ pass the real output directory here
+    } else {
+      console.log("⚠️ XML files generated but none found in the output directory, skipping PR creation.");
+    }
+  } else {
+    console.log("⚠️ No XML files generated, skipping PR creation.");
+  }
+
+  return { data, errors, skipped };
 }
