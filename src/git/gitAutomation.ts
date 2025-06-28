@@ -9,11 +9,11 @@ dotenv.config();
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const REPO_OWNER = process.env.REPO_OWNER;
 const REPO_NAME = process.env.REPO_NAME;
-const REVIEWERS: string[] = []; // 👉 add reviewers if needed
+const REVIEWERS: string[] = []; // Optional reviewers
 
 const TEMP_DIR = path.resolve("./temp-clone");
 
-export async function runGitAutomation(outputDir: string): Promise<void> {
+export async function runGitAutomation(): Promise<void> {
   console.log("Checking .env variables...");
   if (!GITHUB_TOKEN || !REPO_OWNER || !REPO_NAME) {
     console.error(
@@ -51,7 +51,7 @@ export async function runGitAutomation(outputDir: string): Promise<void> {
     process.exit(1);
   }
 
-  const LOCAL_OUTPUT_DIR = path.resolve(outputDir);
+  const LOCAL_OUTPUT_DIR = path.resolve("./output");
   const TARGET_OUTPUT_DIR = path.join(TEMP_DIR, "output");
 
   console.log(`Ensuring local output folder exists: ${LOCAL_OUTPUT_DIR}`);
@@ -78,54 +78,65 @@ export async function runGitAutomation(outputDir: string): Promise<void> {
   await fs.ensureDir(TARGET_OUTPUT_DIR);
 
   console.log("Copying XML files to cloned repo...");
+  const copiedFiles: string[] = [];
+
   for (const file of xmlFiles) {
     const src = path.join(LOCAL_OUTPUT_DIR, file);
     const dest = path.join(TARGET_OUTPUT_DIR, file);
-    console.log(`Copying ${src} -> ${dest}`);
+
+    const srcExists = await fs.pathExists(src);
+    if (!srcExists) {
+      console.log(`❌ Source file missing: ${src}`);
+      continue;
+    }
+
+    const destExists = await fs.pathExists(dest);
+
+    if (destExists) {
+      const [srcContent, destContent] = await Promise.all([
+        fs.readFile(src, "utf-8"),
+        fs.readFile(dest, "utf-8"),
+      ]);
+
+      if (srcContent === destContent) {
+        console.log(`✅ File unchanged: ${file}, skipping copy.`);
+        continue;
+      } else {
+        console.log(`⚠️ File changed: ${file}, updating.`);
+      }
+    } else {
+      console.log(`📄 New file: ${file}, adding.`);
+    }
+
     await fs.copy(src, dest);
+    copiedFiles.push(file);
   }
 
-  console.log("Removing any submodule reference to 'output' if exists...");
-  try {
-    await repoGit.subModule(["deinit", "-f", "output"]);
-    await repoGit.rm(["-rf", "output"]);
-    await fs.remove(path.join(TEMP_DIR, ".gitmodules"));
-    await repoGit.raw(["config", "-f", ".git/config", "--remove-section", "submodule.output"]);
-    console.log("✅ Submodule 'output' removed if it existed.");
-  } catch (e) {
-    console.log("ℹ️ No submodule cleanup needed or already clean.");
-  }
-
-  const copiedFiles = await fs.readdir(TARGET_OUTPUT_DIR).catch(() => []);
   console.log("Copied XML files in cloned repo output folder:", copiedFiles);
 
   if (copiedFiles.length === 0) {
-    console.log("✅ No XML files copied into cloned repo; skipping commit & PR creation.");
+    console.log("✅ No new or updated XML files copied into cloned repo; skipping commit & PR creation.");
     return;
   }
 
   console.log("Staging XML files for git...");
-  await repoGit.add("output/*.xml"); // Path relative to cloned repo root
+  await repoGit.add("output/*.xml");
 
   const status = await repoGit.status();
   console.log("Git status after staging:", status);
 
- if (
-  status.not_added.length === 0 &&
-  status.modified.length === 0 &&
-  status.created.length === 0 &&
-  status.renamed.length === 0
-) {
-  console.log("✅ No new, modified, or renamed XML files found; skipping commit & PR creation.");
-  return;
-}
-
-console.log(
-  `Detected changes: Added(${status.not_added.length}), Modified(${status.modified.length}), Created(${status.created.length}), Renamed(${status.renamed.length})`
-);
+  if (
+    status.not_added.length === 0 &&
+    status.modified.length === 0 &&
+    status.created.length === 0 &&
+    status.renamed.length===0
+  ) {
+    console.log("✅ No new or modified XML files found after staging; skipping commit & PR creation.");
+    return;
+  }
 
   console.log(
-    `Detected changes: Added(${status.not_added.length}), Modified(${status.modified.length}), Created(${status.created.length})`
+    `Detected changes: Added(${status.not_added.length}), Modified(${status.modified.length}), Created(${status.created.length}), Renamed(${status.renamed.length})`
   );
 
   console.log("Committing files...");

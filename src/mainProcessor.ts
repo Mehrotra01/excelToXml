@@ -15,7 +15,7 @@ export async function processExcelFile(filePath: string): Promise<any> {
     console.log("Files in local output folder after XML generation:", filesInOutput);
 
     if (filesInOutput.length > 0) {
-      await runGitAutomation(outputDir); // ✅ pass the real output directory here
+      await runGitAutomation(); // ✅ pass the real output directory here
     } else {
       console.log("⚠️ XML files generated but none found in the output directory, skipping PR creation.");
     }
