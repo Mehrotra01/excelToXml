@@ -11,7 +11,7 @@ function sanitizeFileName(fileName: string): string {
 }
 
 export async function generateXMLFile(rows: any[]): Promise<string[]> {
-  const outDir = "./output";
+  const outDir =  path.resolve("./output");
   await fs.ensureDir(outDir);
   const allFiles: string[] = [];
 
