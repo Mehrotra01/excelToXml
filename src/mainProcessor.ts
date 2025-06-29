@@ -1,8 +1,8 @@
-import * as fs from "fs-extra";
+import fs from "fs-extra";
 import * as path from "path";
-import { parseExcel } from "./parser/excelParser";
-import { generateXMLFile } from "./generator/xmlGenerator";
-import { runGitAutomation } from "./git/gitAutomation";
+import { parseExcel } from "./parser/excelParser.js";
+import { generateXMLFile } from "./generator/xmlGenerator.js";
+import { runGitAutomation } from "./git/gitAutomation.js";
 
 export async function processExcelFile(filePath: string): Promise<any> {
   const { data, errors, skipped } = await parseExcel(filePath);

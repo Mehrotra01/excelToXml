@@ -1,8 +1,8 @@
 // src/parser/parseExcel.ts
 import ExcelJS from "exceljs";
 import { ZodError, z } from "zod";
-import { hasFileBeenProcessed } from "../logger/processedFileLogs";
-import { formatDate, formatZodError } from "../utils/formating";
+import { hasFileBeenProcessed } from "../logger/processedFileLogs.js";
+import { formatDate, formatZodError } from "../utils/formating.js";
 
 const REQUIRED_FIELDS = [
   "formNbr",

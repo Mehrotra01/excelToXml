@@ -1,6 +1,6 @@
 import * as dotenv from "dotenv";
 import simpleGit, { SimpleGit } from "simple-git";
-import * as fs from "fs-extra";
+import fs from "fs-extra";
 import * as path from "path";
 import { Octokit } from "@octokit/rest";
 
