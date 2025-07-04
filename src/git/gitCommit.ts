@@ -3,7 +3,7 @@ import axios from "axios";
 
 // Environment variables and constants
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN; // Use environment variable
-const BASE_BRANCH = "main"; // Target branch
+const BASE_BRANCH = "master"; // Target branch
 const owner = process.env.GITHUB_OWNER || "hmehrotr"; // Configurable owner
 const repo = process.env.GITHUB_REPO || "1iquibaseXmlTool"; // Configurable repo
 
