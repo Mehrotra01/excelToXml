@@ -1,8 +1,6 @@
 import fs from "fs-extra";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import path from "path";
+
 const LOG_FILE_PATH = path.resolve(__dirname, "../../output/processed-files.log");
 
 export async function hasFileBeenProcessed(fileName: string): Promise<boolean> {

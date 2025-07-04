@@ -1,9 +1,8 @@
-import fs from "fs-extra";
+import * as fs from "fs-extra";
 import * as path from "path";
-import { parseExcel } from "./parser/excelParser.js";
-import { generateXMLFile } from "./generator/xmlGenerator.js";
-import { runGitAutomation } from "./git/gitAutomation.js";
-import { automateGitProcess } from "./git/gitCommit.js";
+import { parseExcel } from "./parser/excelParser";
+import { generateXMLFile } from "./generator/xmlGenerator";
+import { runGitAutomation } from "./git/gitAutomation";
 
 export async function processExcelFile(filePath: string): Promise<any> {
   const { data, errors, skipped } = await parseExcel(filePath);
@@ -17,7 +16,7 @@ export async function processExcelFile(filePath: string): Promise<any> {
 
     if (filesInOutput.length > 0) {
       // await runGitAutomation(); // ✅ pass the real output directory here
-      automateGitProcess()
+      // automateGitProcess()
     } else {
       console.log("⚠️ XML files generated but none found in the output directory, skipping PR creation.");
     }

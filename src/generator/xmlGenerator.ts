@@ -1,8 +1,8 @@
 // src/generator/xmlGenerator.ts
 import { create } from "xmlbuilder2";
-import fs from "fs-extra";
+import * as fs from "fs-extra";
 import * as path from "path";
-import { markFileAsProcessed } from "../logger/processedFileLogs.js";
+import { markFileAsProcessed } from "../logger/processedFileLogs";
 
 function sanitizeFileName(fileName: string): string {
   return fileName

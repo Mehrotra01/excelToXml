@@ -1,13 +1,10 @@
 // src/server.ts or wherever your main entry is
 import express from "express";
 import multer from "multer";
-import { processExcelFile } from "./mainProcessor.js";
+import path from "path";
+import { processExcelFile } from "./mainProcessor";
 import fs from "fs-extra";
-import { MulterReqquest } from "./types/express-multer.js";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { MulterReqquest } from "./types/express-multer";
 
 const app = express();
 const port = 3300;
