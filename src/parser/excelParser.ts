@@ -41,6 +41,8 @@ const InsertSchema = z.object({
 
 export async function parseExcel(filePath: string): Promise<{
   data: ParsedRow[];
+  groupedInserts: Record<string, ParsedRow[]>;
+  groupedUpdates: Record<string, ParsedRow[]>;
   errors: { Sheet: number; rowNumber: number; error: string }[];
   skipped: { Sheet: number; rowNumber: number; reason: string }[];
 }> {
@@ -48,6 +50,10 @@ export async function parseExcel(filePath: string): Promise<{
   await workbook.xlsx.readFile(filePath);
 
   const rows: ParsedRow[] = [];
+  const groupedInserts: Record<string, ParsedRow[]> = {};
+  const groupedUpdates: Record<string, ParsedRow[]> = {};
+  const insertedForms = new Set<string>();
+  const updatedForms = new Set<string>();
   const failedRows: { Sheet: number; rowNumber: number; error: string }[] = [];
   const skippedRows: { Sheet: number; rowNumber: number; reason: string }[] =
     [];
@@ -139,6 +145,15 @@ export async function parseExcel(filePath: string): Promise<{
 
       try {
         if (operation === "insert") {
+          if (updatedForms.has(data.formNbr)) {
+            failedRows.push({
+              Sheet: sheetNumber,
+              rowNumber,
+              error: `Form "${data.formNbr}" already exists in update list, skipping insert.`,
+            });
+            continue;
+          }
+
           InsertSchema.parse(data);
 
           const raw = String(data.srtKey || "").trim();
@@ -214,8 +229,28 @@ export async function parseExcel(filePath: string): Promise<{
             )
           );
 
-          rows.push({ meta, ...staticFields, ...dynamicFields });
+          const fullRow: ParsedRow = {
+            meta,
+            ...staticFields,
+            ...dynamicFields,
+          };
+
+          rows.push(fullRow);
+          insertedForms.add(data.formNbr);
+
+          if (!groupedInserts[meta.fileName])
+            groupedInserts[meta.fileName] = [];
+          groupedInserts[meta.fileName].push(fullRow);
         } else if (operation === "update") {
+          if (insertedForms.has(data.formNbr)) {
+            skippedRows.push({
+              Sheet: sheetNumber,
+              rowNumber,
+              reason: `Form "${data.formNbr}" already exists in insert list, skipping update.`,
+            });
+            continue;
+          }
+
           const attributeToUpdate: Record<string, any> = {};
 
           for (const [key, value] of Object.entries(data)) {
@@ -242,6 +277,11 @@ export async function parseExcel(filePath: string): Promise<{
                   LEVEL2: digits.substring(2, 5),
                   LEVEL3: digits.substring(5, 8),
                 };
+              } else if (key === "rcpType") {
+                attributeToUpdate[key] = String(value || "")
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean);
               } else {
                 attributeToUpdate[key] = value;
               }
@@ -257,7 +297,17 @@ export async function parseExcel(filePath: string): Promise<{
             continue;
           }
 
-          rows.push({ meta, formNbr: data.formNbr, attributeToUpdate });
+          const fullRow: ParsedRow = {
+            meta,
+            formNbr: data.formNbr,
+            attributeToUpdate,
+          };
+          rows.push(fullRow);
+          updatedForms.add(data.formNbr);
+
+          if (!groupedUpdates[meta.fileName])
+            groupedUpdates[meta.fileName] = [];
+          groupedUpdates[meta.fileName].push(fullRow);
         }
       } catch (err: any) {
         failedRows.push({
@@ -276,5 +326,11 @@ export async function parseExcel(filePath: string): Promise<{
   console.log(`❌ Failed: ${failedRows.length}`);
   console.log(`⏭️ Skipped: ${skippedRows.length}`);
 
-  return { data: rows, errors: failedRows, skipped: skippedRows };
+  return {
+    data: rows,
+    groupedInserts,
+    groupedUpdates,
+    errors: failedRows,
+    skipped: skippedRows,
+  };
 }
